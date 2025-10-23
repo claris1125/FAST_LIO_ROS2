@@ -582,14 +582,30 @@ void publish_map(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub
 {
     PointCloudXYZI::Ptr laserCloudFullRes(dense_pub_en ? feats_undistort : feats_down_body);
     int size = laserCloudFullRes->points.size();
-    PointCloudXYZI::Ptr laserCloudWorld( \
-                    new PointCloudXYZI(size, 1));
+    PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI());
+    laserCloudWorld->reserve(size);
 
+    PointType pw;
     for (int i = 0; i < size; i++)
     {
-        RGBpointBodyToWorld(&laserCloudFullRes->points[i], \
-                            &laserCloudWorld->points[i]);
+        RGBpointBodyToWorld(&laserCloudFullRes->points[i], &pw);
+        if (pw.z >= z_clip_min_ && pw.z <= z_clip_max_)
+        {
+            laserCloudWorld->push_back(pw);
+        }
     }
+
+    if (map_z_clip_apply_full_ && !pcl_wait_pub->empty())
+    {
+        PointCloudXYZI::Ptr tmp(new PointCloudXYZI());
+        tmp->reserve(pcl_wait_pub->size());
+        for (const auto &pt : pcl_wait_pub->points)
+        {
+            if (pt.z >= z_clip_min_ && pt.z <= z_clip_max_) tmp->push_back(pt);
+        }
+        pcl_wait_pub.swap(tmp);
+    }
+
     *pcl_wait_pub += *laserCloudWorld;
 
     sensor_msgs::msg::PointCloud2 laserCloudmsg;
@@ -801,6 +817,9 @@ public:
         this->declare_parameter<bool>("publish.path_en", true);
         this->declare_parameter<bool>("publish.effect_map_en", false);
         this->declare_parameter<bool>("publish.map_en", false);
+        this->declare_parameter<double>("publish.z_min", -1e9);
+        this->declare_parameter<double>("publish.z_max", 1e9);
+        this->declare_parameter<bool>("publish.map_z_clip_apply_full", true);
         this->declare_parameter<bool>("publish.scan_publish_en", true);
         this->declare_parameter<bool>("publish.dense_publish_en", true);
         this->declare_parameter<bool>("publish.scan_bodyframe_pub_en", true);
@@ -837,6 +856,9 @@ public:
         this->get_parameter_or<bool>("publish.path_en", path_en, true);
         this->get_parameter_or<bool>("publish.effect_map_en", effect_pub_en, false);
         this->get_parameter_or<bool>("publish.map_en", map_pub_en, false);
+        this->get_parameter_or<double>("publish.z_min", z_clip_min_, -1e9);
+        this->get_parameter_or<double>("publish.z_max", z_clip_max_, 1e9);
+        this->get_parameter_or<bool>("publish.map_z_clip_apply_full", map_z_clip_apply_full_, true);
         this->get_parameter_or<bool>("publish.scan_publish_en", scan_pub_en, true);
         this->get_parameter_or<bool>("publish.dense_publish_en", dense_pub_en, true);
         this->get_parameter_or<bool>("publish.scan_bodyframe_pub_en", scan_body_pub_en, true);
@@ -955,6 +977,10 @@ public:
     }
 
 private:
+    // Z clipping for published map (camera_init/world frame)
+    double z_clip_min_ = -1e9;
+    double z_clip_max_ = 1e9;
+    bool map_z_clip_apply_full_ = true;
     void timer_callback()
     {
         if(sync_packages(Measures))
