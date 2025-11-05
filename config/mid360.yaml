@@ -44,7 +44,7 @@
             dense_publish_en: true       # true: publish full-resolution scan before downsample
             scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
             z_min: -100.0                # Z clipping in world frame (camera_init)
-            z_max: 2.2                   # set ceiling height (e.g., 2.2 m)
+            z_max: 2.0                   # set ceiling height (e.g., 2.2 m)
             map_z_clip_apply_full: true  # also clip accumulated map
 
         pcd_save:
